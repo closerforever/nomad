@@ -1,10 +1,16 @@
 package state
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/nomad/nomad/event"
+	"github.com/hashicorp/nomad/nomad/structs"
+)
+
+const (
+	CtxMsgType = "msgtype"
 )
 
 // ReadTxn is implemented by memdb.Txn to perform read operations.
@@ -43,7 +49,7 @@ func NewChangeTrackerDB(db *memdb.MemDB, publisher eventPublisher, changesFn cha
 type changeProcessor func(ReadTxn, Changes) ([]event.Event, error)
 
 type eventPublisher interface {
-	Publish(events []event.Event)
+	Publish(index uint64, events []event.Event)
 }
 
 // noOpPublisher satisfies the eventPublisher interface and does nothing
@@ -89,7 +95,7 @@ func (c *changeTrackerDB) publish(changes Changes) error {
 	if err != nil {
 		return fmt.Errorf("failed generating events from changes: %v", err)
 	}
-	c.publisher.Publish(events)
+	c.publisher.Publish(changes.Index, events)
 	return nil
 }
 
@@ -118,8 +124,9 @@ type txn struct {
 	// read-only, or WriteTxnRestore transaction.
 	// Index is stored so that it may be passed along to any subscribers as part
 	// of a change event.
-	Index   uint64
-	publish func(changes Changes) error
+	Index          uint64
+	publish        func(changes Changes) error
+	fsmRequestType structs.MessageType
 }
 
 // Commit first pushes changes to EventPublisher, then calls Commit on the
@@ -144,6 +151,14 @@ func (tx *txn) Commit() error {
 
 	tx.Txn.Commit()
 	return nil
+}
+func (tx *txn) WithType(ctx context.Context) *txn {
+
+	msg := ctx.Value(CtxMsgType)
+	if msg != nil {
+		tx.fsmRequestType = msg.(structs.MessageType)
+	}
+	return tx
 }
 
 func processDBChanges(tx ReadTxn, changes Changes) ([]event.Event, error) {
