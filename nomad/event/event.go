@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	lru "github.com/hashicorp/golang-lru"
 )
 
 type Event struct {
@@ -16,7 +15,7 @@ type Event struct {
 }
 
 type EventPublisherCfg struct {
-	EventCacheSize int
+	EventBufferSize int64
 }
 
 type EventPublisher struct {
@@ -24,9 +23,7 @@ type EventPublisher struct {
 
 	lock sync.Mutex
 
-	events *lru.Cache
-
-	es *eventBuffer
+	events *eventBuffer
 
 	logger hclog.Logger
 
@@ -37,12 +34,9 @@ type EventPublisher struct {
 }
 
 func NewEventPublisher(cfg EventPublisherCfg) (*EventPublisher, error) {
-	cache, err := lru.New(cfg.EventCacheSize)
-	if err != nil {
-		return nil, err
-	}
+	buffer := newEventBuffer(cfg.EventBufferSize)
 	return &EventPublisher{
-		events:    cache,
+		events:    buffer,
 		publishCh: make(chan changeEvents),
 	}, nil
 }
