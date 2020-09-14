@@ -13,30 +13,30 @@ func testCfg() EventPublisherCfg {
 	}
 }
 
-func TestEvents_Publish(t *testing.T) {
+func TestEvents_Publisher_Publish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pub, err := NewEventPublisher(ctx, testCfg())
-	require.NoError(t, err)
+	pub := NewEventPublisher(ctx, testCfg())
 
-}
+	for i := 0; i < 10; i++ {
+		idx := uint64(i)
+		e := Event{
+			Index: idx,
+		}
+		pub.Publish(idx, []Event{e})
+	}
 
-func TestEvents_PeriodicPrune(t *testing.T) {
+	idx := uint64(10)
+	var events []Event
+	for i := 0; i < 5; i++ {
+		idx := uint64(i)
+		e := Event{
+			Index: idx,
+		}
+		events = append(events, e)
+	}
+	pub.Publish(idx, events)
 
-	// pub, err := NewEventPublisher(EventPublisherCfg{EventCacheSize: 5})
-	// require.NoError(t, err)
-
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
-
-	// go pub.handleUpdates(ctx)
-
-	// for i := 0; i < 25; i++ {
-	// 	e := []Event{Event{Index: uint64(i)}}
-	// 	pub.Publish(e)
-	// }
-
-	// require.Equal(t, pub.events.Len(), 5)
-	// oldest, v, _ := pub.events.GetOldest()
+	require.Equal(t, 11, pub.events.Len())
 }
