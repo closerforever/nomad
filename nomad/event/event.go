@@ -76,5 +76,5 @@ func (e *EventPublisher) sendEvents(update changeEvents) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	e.es.Append(update.index, update.events)
+	e.events.Append(update.index, update.events)
 }
