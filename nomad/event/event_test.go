@@ -1,10 +1,28 @@
 package event
 
 import (
+	"context"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
+func testCfg() EventPublisherCfg {
+	return EventPublisherCfg{
+		EventBufferSize: 100,
+	}
+}
+
 func TestEvents_Publish(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pub, err := NewEventPublisher(ctx, testCfg())
+	require.NoError(t, err)
+
+}
+
+func TestEvents_PeriodicPrune(t *testing.T) {
 
 	// pub, err := NewEventPublisher(EventPublisherCfg{EventCacheSize: 5})
 	// require.NoError(t, err)
