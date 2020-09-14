@@ -15,7 +15,7 @@ func TestEventBufferFuzz(t *testing.T) {
 	nReaders := 1000
 	nMessages := 1000
 
-	b := newEventBuffer(1000)
+	b := newEventBuffer(1000, defaultTTL)
 
 	// Start a write goroutine that will publish 10000 messages with sequential
 	// indexes and some jitter in timing (to allow clients to "catch up" and block
@@ -84,7 +84,7 @@ func TestEventBufferFuzz(t *testing.T) {
 
 func TestEventBuffer_Slow_Reader(t *testing.T) {
 
-	b := newEventBuffer(10)
+	b := newEventBuffer(10, defaultTTL)
 
 	for i := 0; i < 10; i++ {
 		e := Event{
@@ -113,7 +113,7 @@ func TestEventBuffer_Slow_Reader(t *testing.T) {
 }
 
 func TestEventBuffer_Size(t *testing.T) {
-	b := newEventBuffer(100)
+	b := newEventBuffer(100, defaultTTL)
 
 	for i := 0; i < 10; i++ {
 		e := Event{
@@ -123,4 +123,27 @@ func TestEventBuffer_Size(t *testing.T) {
 	}
 
 	require.Equal(t, int64(10), b.Len())
+}
+
+// TestEventBuffer_Prune_AllOld tests the behavior when all items
+// are past their TTL, the event buffer should prune down to the last message
+// and hold onto the last item.
+func TestEventBuffer_Prune_AllOld(t *testing.T) {
+	b := newEventBuffer(100, 1*time.Second)
+
+	for i := 0; i < 10; i++ {
+		e := Event{
+			Index: uint64(i), // Indexes should be contiguous
+		}
+		b.Append(uint64(i), []Event{e})
+	}
+
+	require.Equal(t, 10, int(b.Len()))
+
+	time.Sleep(1 * time.Second)
+
+	b.prune()
+
+	require.Equal(t, 9, int(b.Head().Index))
+	require.Equal(t, 0, b.Len())
 }

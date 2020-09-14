@@ -3,6 +3,7 @@ package event
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 )
@@ -25,6 +26,8 @@ type EventPublisher struct {
 
 	events *eventBuffer
 
+	pruneTick time.Duration
+
 	logger hclog.Logger
 
 	// publishCh is used to send messages from an active txn to a goroutine which
@@ -33,12 +36,17 @@ type EventPublisher struct {
 	publishCh chan changeEvents
 }
 
-func NewEventPublisher(cfg EventPublisherCfg) (*EventPublisher, error) {
-	buffer := newEventBuffer(cfg.EventBufferSize)
-	return &EventPublisher{
+func NewEventPublisher(ctx context.Context, cfg EventPublisherCfg) (*EventPublisher, error) {
+	buffer := newEventBuffer(cfg.EventBufferSize, 1*time.Hour)
+	e := &EventPublisher{
 		events:    buffer,
 		publishCh: make(chan changeEvents),
-	}, nil
+	}
+
+	go e.handleUpdates(ctx)
+	go e.periodicPrune(ctx)
+
+	return e, nil
 }
 
 type changeEvents struct {
@@ -66,6 +74,19 @@ func (e *EventPublisher) handleUpdates(ctx context.Context) {
 			return
 		case update := <-e.publishCh:
 			e.sendEvents(update)
+		}
+	}
+}
+
+func (e *EventPublisher) periodicPrune(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(e.pruneTick):
+			e.lock.Lock()
+			e.events.prune()
+			e.lock.Unlock()
 		}
 	}
 }

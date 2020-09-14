@@ -5,6 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
+	"time"
+)
+
+const (
+	defaultTTL = 1 * time.Hour
 )
 
 // eventBuffer is a single-writer, multiple-reader, fixed length concurrent
@@ -43,14 +48,17 @@ import (
 type eventBuffer struct {
 	size *int64
 
+	ctx context.Context
+
 	head atomic.Value
 	tail atomic.Value
 
-	maxSize int64
+	maxSize    int64
+	maxItemTTL time.Duration
 }
 
 // newEventBuffer creates an eventBuffer ready for use.
-func newEventBuffer(size int64) *eventBuffer {
+func newEventBuffer(size int64, maxItemTTL time.Duration) *eventBuffer {
 	zero := int64(0)
 	b := &eventBuffer{maxSize: size, size: &zero}
 
@@ -85,21 +93,25 @@ func (b *eventBuffer) appendItem(item *bufferItem) {
 	// Check if we need to advance the head to keep the list
 	// constrained to max size
 	if size > b.maxSize {
-		// Close the old head's droppedCh notifying slow
-		// readers that it is no longer in the buffer.
-		// Slow readers will prevent this item from being GC'd until
-		// they discard it.
-		oldHead := b.Head()
-		close(oldHead.link.droppedCh)
-
-		b.head.Store(oldHead.link.next.Load())
-
-		// Decrement the buffer size
-		atomic.AddInt64(b.size, -1)
+		b.advanceHead()
 	}
 
 	// notify waiters next event is available
 	close(oldTail.link.ch)
+
+}
+
+// advanceHead drops the current Head buffer item and notifies readers
+// that the item should be discarded by closing droppedCh.
+// Slow readers will prevent the old head from being GC'd until they
+// discard it.
+func (b *eventBuffer) advanceHead() {
+	old := b.Head()
+	next := old.link.next.Load()
+
+	close(old.link.droppedCh)
+	b.head.Store(next)
+	atomic.AddInt64(b.size, -1)
 
 }
 
@@ -122,8 +134,23 @@ func (b *eventBuffer) Tail() *bufferItem {
 }
 
 // Len returns the current length of the buffer
-func (b *eventBuffer) Len() int64 {
-	return atomic.LoadInt64(b.size)
+func (b *eventBuffer) Len() int {
+	return int(atomic.LoadInt64(b.size))
+}
+
+func (b *eventBuffer) prune() {
+	for {
+		head := b.Head()
+		if b.Len() == 0 {
+			return
+		}
+
+		if time.Since(head.createdAt) > b.maxItemTTL {
+			b.advanceHead()
+		} else {
+			return
+		}
+	}
 }
 
 // bufferItem represents a set of events published by a single raft operation.
@@ -160,6 +187,8 @@ type bufferItem struct {
 	// events in one buffer just for the side-effect of watching for the next set.
 	// The link may not be mutated once the event is appended to a buffer.
 	link *bufferLink
+
+	createdAt time.Time
 }
 
 type bufferLink struct {
@@ -187,8 +216,9 @@ func newBufferItem(index uint64, events []Event) *bufferItem {
 			ch:        make(chan struct{}),
 			droppedCh: make(chan struct{}),
 		},
-		Events: events,
-		Index:  index,
+		Events:    events,
+		Index:     index,
+		createdAt: time.Now(),
 	}
 }
 
