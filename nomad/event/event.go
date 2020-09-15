@@ -1,3 +1,5 @@
+package event
+
 import (
 	"context"
 	"sync"
@@ -15,6 +17,7 @@ type Event struct {
 
 type EventPublisherCfg struct {
 	EventBufferSize int64
+	EventBufferTTL  time.Duration
 }
 
 type EventPublisher struct {
@@ -34,8 +37,11 @@ type EventPublisher struct {
 	publishCh chan changeEvents
 }
 
-func NewEventPublisher(ctx context.Context, cfg EventPublisherCfg) (*EventPublisher, error) {
-	buffer := newEventBuffer(cfg.EventBufferSize, 1*time.Hour)
+func NewEventPublisher(ctx context.Context, cfg EventPublisherCfg) *EventPublisher {
+	if cfg.EventBufferTTL == 0 {
+		cfg.EventBufferTTL = 1 * time.Hour
+	}
+	buffer := newEventBuffer(cfg.EventBufferSize, cfg.EventBufferTTL)
 	e := &EventPublisher{
 		events:    buffer,
 		publishCh: make(chan changeEvents),
@@ -44,7 +50,7 @@ func NewEventPublisher(ctx context.Context, cfg EventPublisherCfg) (*EventPublis
 	go e.handleUpdates(ctx)
 	go e.periodicPrune(ctx)
 
-	return e, nil
+	return e
 }
 
 type changeEvents struct {

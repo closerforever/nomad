@@ -60,7 +60,11 @@ type eventBuffer struct {
 // newEventBuffer creates an eventBuffer ready for use.
 func newEventBuffer(size int64, maxItemTTL time.Duration) *eventBuffer {
 	zero := int64(0)
-	b := &eventBuffer{maxSize: size, size: &zero}
+	b := &eventBuffer{
+		maxSize:    size,
+		size:       &zero,
+		maxItemTTL: maxItemTTL,
+	}
 
 	item := newBufferItem(0, nil)
 
