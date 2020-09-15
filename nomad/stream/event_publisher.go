@@ -14,8 +14,6 @@ type EventPublisherCfg struct {
 }
 
 type EventPublisher struct {
-	size int64
-
 	lock sync.Mutex
 
 	events *eventBuffer
@@ -84,8 +82,7 @@ type changeEvents struct {
 	events []Event
 }
 
-// sendEvents sends the given events to any applicable topic listeners, as well
-// as any ACL update events to cause affected listeners to reset their stream.
+// sendEvents sends the given events to the publishers event buffer.
 func (e *EventPublisher) sendEvents(update changeEvents) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
