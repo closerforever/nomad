@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/hashicorp/nomad/helper"
-	"github.com/hashicorp/nomad/nomad/event"
+	"github.com/hashicorp/nomad/nomad/stream"
 	"github.com/hashicorp/nomad/nomad/structs"
 )
 
@@ -80,7 +80,11 @@ func NewStateStore(config *StateStoreConfig) (*StateStore, error) {
 		config:    config,
 		abandonCh: make(chan struct{}),
 	}
-	s.db = NewChangeTrackerDB(db, event.NewPublisher(), processDBChanges)
+	publisher := stream.NewEventPublisher(context.TODO(), stream.EventPublisherCfg{
+		EventBufferTTL:  1 * time.Hour,
+		EventBufferSize: 250,
+	})
+	s.db = NewChangeTrackerDB(db, publisher, processDBChanges)
 
 	// Initialize the state store with required enterprise objects
 	if err := s.enterpriseInit(); err != nil {
@@ -880,7 +884,7 @@ func (s *StateStore) BatchUpdateNodeDrain(index uint64, updatedAt int64, updates
 }
 
 // UpdateNodeDrain is used to update the drain of a node
-func (s *StateStore) UpdateNodeDrain(ctx context.Context, index uint64, nodeID string,
+func (s *StateStore) UpdateNodeDrain(index uint64, nodeID string,
 	drain *structs.DrainStrategy, markEligible bool, updatedAt int64, event *structs.NodeEvent) error {
 
 	txn := s.db.WriteTxn(index)

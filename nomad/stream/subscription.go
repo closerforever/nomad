@@ -1,4 +1,4 @@
-package event
+package stream
 
 import "github.com/hashicorp/go-hclog"
 

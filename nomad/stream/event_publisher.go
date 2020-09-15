@@ -1,4 +1,4 @@
-package event
+package stream
 
 import (
 	"context"
@@ -7,13 +7,6 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 )
-
-type Event struct {
-	Topic   string
-	Key     string
-	Index   uint64
-	Payload interface{}
-}
 
 type EventPublisherCfg struct {
 	EventBufferSize int64
@@ -53,15 +46,6 @@ func NewEventPublisher(ctx context.Context, cfg EventPublisherCfg) *EventPublish
 	return e
 }
 
-type changeEvents struct {
-	index  uint64
-	events []Event
-}
-
-func NewPublisher() *EventPublisher {
-	return &EventPublisher{}
-}
-
 // Publish events to all subscribers of the event Topic.
 func (e *EventPublisher) Publish(index uint64, events []Event) {
 	if len(events) > 0 {
@@ -93,6 +77,11 @@ func (e *EventPublisher) periodicPrune(ctx context.Context) {
 			e.lock.Unlock()
 		}
 	}
+}
+
+type changeEvents struct {
+	index  uint64
+	events []Event
 }
 
 // sendEvents sends the given events to any applicable topic listeners, as well
